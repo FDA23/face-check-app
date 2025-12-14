@@ -1,5 +1,5 @@
 streamlit
+mediapipe
 opencv-python-headless
-dlib
 numpy
-requests
+Pillow
