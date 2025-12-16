@@ -1,4 +1,5 @@
 import streamlit as st
+st.set_page_config(page_title="顔バランス＆肌比較診断アプリ", page_icon="📷")
 import mediapipe as mp
 import cv2
 import numpy as np
@@ -254,3 +255,4 @@ if file_a and file_b:
             st.error("どちらかの画像から顔を検出できませんでした。")
 elif file_a or file_b:
     st.info("比較のために、もう1枚の画像をアップロードしてください。")
+
