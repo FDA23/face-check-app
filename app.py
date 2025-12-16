@@ -3,6 +3,7 @@ import mediapipe as mp
 import cv2
 import numpy as np
 from PIL import Image, ImageOps
+import math
 
 # --- 設定と関数定義 ---
 st.set_page_config(page_title="顔バランス＆肌比較診断", layout="wide")
@@ -31,9 +32,19 @@ def load_and_fix_image(uploaded_file):
     
     return np.array(image)
 
-def draw_mesh(image, landmarks_proto):
-    """顔のメッシュ（骨格）を描画する関数"""
+def calculate_distance(p1, p2):
+    """2点間の距離を計算する"""
+    return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+
+def draw_mesh_and_box(image, landmarks_proto):
+    """
+    網目（メッシュ）と外枠（ボックス）を両方描画し、比率を計算する
+    """
+    h, w, _ = image.shape
     annotated_image = image.copy()
+    landmarks_list = landmarks_proto.landmark
+
+    # 1. 網目（メッシュ）を描画
     mp_drawing.draw_landmarks(
         image=annotated_image,
         landmark_list=landmarks_proto,
@@ -46,7 +57,40 @@ def draw_mesh(image, landmarks_proto):
         connections=mp_face_mesh.FACEMESH_CONTOURS,
         landmark_drawing_spec=None,
         connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style())
-    return annotated_image
+
+    # 2. 基準点の取得（縦横計測用）
+    top_idx = 10     # おでこの上
+    bottom_idx = 152 # あご先
+    left_idx = 234   # 左耳横（頬骨）
+    right_idx = 454  # 右耳横（頬骨）
+    
+    pt_top = (int(landmarks_list[top_idx].x * w), int(landmarks_list[top_idx].y * h))
+    pt_bottom = (int(landmarks_list[bottom_idx].x * w), int(landmarks_list[bottom_idx].y * h))
+    pt_left = (int(landmarks_list[left_idx].x * w), int(landmarks_list[left_idx].y * h))
+    pt_right = (int(landmarks_list[right_idx].x * w), int(landmarks_list[right_idx].y * h))
+    
+    # 3. 縦横ライン（十字）を描く
+    cv2.line(annotated_image, pt_top, pt_bottom, (0, 255, 255), 3) # 縦線（黄色・太め）
+    cv2.line(annotated_image, pt_left, pt_right, (0, 255, 255), 3) # 横線（黄色・太め）
+
+    # 4. 外枠（バウンディングボックス）を描く
+    x_coords = [pt_top[0], pt_bottom[0], pt_left[0], pt_right[0]]
+    y_coords = [pt_top[1], pt_bottom[1], pt_left[1], pt_right[1]]
+    
+    min_x, max_x = min(x_coords), max(x_coords)
+    min_y, max_y = min(y_coords), max(y_coords)
+    
+    # ボックス描画（青色・太め）
+    cv2.rectangle(annotated_image, (min_x, min_y), (max_x, max_y), (255, 0, 0), 3)
+
+    # 5. 比率計算
+    vertical_dist = calculate_distance(pt_top, pt_bottom)
+    horizontal_dist = calculate_distance(pt_left, pt_right)
+    
+    if horizontal_dist == 0: return annotated_image, 0
+    ratio = vertical_dist / horizontal_dist
+
+    return annotated_image, ratio
 
 def analyze_area(image, landmarks_list, indices, area_name):
     """指定エリアを切り抜き、エッジ（しわ）スコアを計算する関数"""
@@ -84,18 +128,16 @@ def process_image(img_array, face_mesh):
     face_landmarks_proto = results.multi_face_landmarks[0] 
     face_landmarks_list = face_landmarks_proto.landmark
 
-    mesh_img = draw_mesh(img_array, face_landmarks_proto)
+    mesh_box_img, ratio = draw_mesh_and_box(img_array, face_landmarks_proto)
+    
     analyzed_img = img_array.copy()
     scores = {}
 
-    # --- 解析エリアの定義 ---
     forehead_idx = [109, 338, 9, 336, 151]
-    
     nasolabial_idx = [
         205, 203, 36, 101, 50, 123, 117, 111, 147, 187, 207, 
         425, 423, 266, 330, 280, 352, 346, 340, 376, 411, 427
     ]
-    
     marionette_idx = [
         57, 186, 212, 287, 410, 432, 273, 335, 406, 313, 18, 83, 182, 106, 43
     ]
@@ -113,11 +155,11 @@ def process_image(img_array, face_mesh):
             x, y, w, h = rect
             cv2.rectangle(analyzed_img, (x, y), (x+w, y+h), color, 2)
 
-    return mesh_img, analyzed_img, scores
+    return mesh_box_img, analyzed_img, scores, ratio
 
 # --- メイン画面構成 ---
 st.title("📸 顔バランス＆肌比較診断")
-st.write("2枚の写真をアップロードして、骨格のゆがみと肌の状態（しわ・キメ）を比較します。")
+st.write("2枚の写真をアップロードして、骨格（網目・外枠）と肌の状態を比較します。")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -140,15 +182,49 @@ if file_a and file_b:
             result_b = process_image(img_b, face_mesh)
 
         if result_a and result_b:
-            mesh_a, analyzed_a, scores_a = result_a
-            mesh_b, analyzed_b, scores_b = result_b
+            mesh_box_a, analyzed_a, scores_a, ratio_a = result_a
+            mesh_box_b, analyzed_b, scores_b, ratio_b = result_b
 
             st.divider()
-            st.header("1. 骨格・ゆがみの可視化")
-            st.info("💡 チェックポイント: 正中のラインは真っ直ぐか？ 左右の目の高さは同じか？ 網目の形に注目してください。")
+            st.header("1. 骨格・ゆがみ・比率")
+            
+            # 【追加】網目とゆがみの見方ガイド
+            st.markdown("""
+            **🤔 網目（メッシュ）でのゆがみのチェック方法**
+            * **中心線（縦の水色線）**: 鼻筋からあごにかけて真っ直ぐですか？「く」の字に曲がっていませんか？
+            * **左右のバランス**: 網目のマス目の大きさは左右同じですか？（片方だけ広いと、そちらが膨らんでいる可能性があります）
+            * **高さの違い**: 目のラインや口角のライン（網目の横線）は水平ですか？
+            """)
+
             col1_mesh, col2_mesh = st.columns(2)
-            col1_mesh.image(mesh_a, caption="画像A: 骨格メッシュ", use_container_width=True)
-            col2_mesh.image(mesh_b, caption="画像B: 骨格メッシュ", use_container_width=True)
+            col1_mesh.image(mesh_box_a, caption=f"画像A: 縦横比 {ratio_a:.3f}", use_container_width=True)
+            col2_mesh.image(mesh_box_b, caption=f"画像B: 縦横比 {ratio_b:.3f}", use_container_width=True)
+
+            # 比率データの表示
+            st.subheader("■ 顔の縦横比（Aspect Ratio）")
+            # 【修正】文言を変更しました
+            st.caption("※縦の長さ（おでこ〜あご） ÷ 横幅（頬骨の端〜端）で計算しています。")
+
+            m_col1, m_col2 = st.columns(2)
+            delta_ratio = ratio_b - ratio_a
+            
+            with m_col1:
+                st.metric("画像A 比率", f"{ratio_a:.3f}")
+                if ratio_a > 1.35:
+                    st.info("ℹ️ **判定目安: 面長寄り**\n縦のラインが強調されています。")
+                elif ratio_a < 1.25:
+                    st.info("ℹ️ **判定目安: 丸顔・横幅寄り**\n丸みや横幅があるバランスです。")
+                else:
+                    st.info("ℹ️ **判定目安: 標準的な卵型バランス**")
+
+            with m_col2:
+                st.metric("画像B 比率", f"{ratio_b:.3f}", delta=f"{delta_ratio:.3f}", help="プラス＝縦長へ、マイナス＝丸顔・小顔へ変化")
+                if ratio_b > 1.35:
+                    st.info("ℹ️ **判定目安: 面長寄り**")
+                elif ratio_b < 1.25:
+                    st.info("ℹ️ **判定目安: 丸顔・横幅寄り**")
+                else:
+                    st.info("ℹ️ **判定目安: 標準的な卵型バランス**")
 
             st.divider()
             st.header("2. しわ・キメ診断エリア")
@@ -172,8 +248,7 @@ if file_a and file_b:
                     st.metric("画像A", f"{score_a:.1f}")
                     st.metric("画像B", f"{score_b:.1f}", delta=f"{delta:.1f}", delta_color="inverse")
             
-            # 【変更点】注意書きを追加しました
-            st.info("💡 ヒント: スコアが「0.0」になる場合は、サイドバーの「しわ検出感度」の数値を下げてみてください。差分（Δ）が緑色でマイナスなら改善の目安です。")
+            st.info("💡 ヒント: スコアが「0.0」になる場合は、サイドバーの「しわ検出感度」の数値を下げてみてください。")
 
         else:
             st.error("どちらかの画像から顔を検出できませんでした。")
