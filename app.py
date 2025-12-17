@@ -2,8 +2,6 @@ import streamlit as st
 import mediapipe as mp
 import streamlit as st
 
-# ↓この1行を追加！画面に「どこから読み込んでいるか」を表示させます
-st.write("MediaPipeの場所:", mp.__file__)
 # ↓この行の "📷" の部分を、ファイル名に書き換えます
 st.set_page_config(page_title="顔バランス＆肌比較診断アプリ", page_icon="my_icon.png")
 import mediapipe as mp
@@ -269,6 +267,7 @@ if file_a and file_b:
             st.error("どちらかの画像から顔を検出できませんでした。")
 elif file_a or file_b:
     st.info("比較のために、もう1枚の画像をアップロードしてください。")
+
 
 
 
