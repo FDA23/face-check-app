@@ -3,7 +3,7 @@ import mediapipe as mp
 import streamlit as st
 
 # ↓この行の "📷" の部分を、ファイル名に書き換えます
-st.set_page_config(page_title="顔バランス＆肌比較診断アプリ", page_icon="my_icon.png")
+st.set_page_config(page_title="顔バランス ゆがみ＆たるみ比較診断アプリ", page_icon="my_icon.png")
 import mediapipe as mp
 import cv2
 import numpy as np
@@ -170,7 +170,7 @@ with col1:
     st.image("my_icon.png")      # 左側にアイコンを表示
 
 with col2:
-    st.title("顔バランス＆肌比較診断") # 右側にタイトルを表示
+    st.title("顔バランス ゆがみ＆たるみ比較診断") # 右側にタイトルを表示
     
 st.write("2枚の写真をアップロードして、骨格（網目・外枠）と肌の状態を比較します。")
 
@@ -267,6 +267,7 @@ if file_a and file_b:
             st.error("どちらかの画像から顔を検出できませんでした。")
 elif file_a or file_b:
     st.info("比較のために、もう1枚の画像をアップロードしてください。")
+
 
 
 
