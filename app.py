@@ -11,7 +11,7 @@ from PIL import Image, ImageOps
 import math
 
 # --- 設定と関数定義 ---
-st.set_page_config(page_title="顔バランス＆肌比較診断", layout="wide")
+st.set_page_config(page_title="顔バランスゆがみ＆たるみ比較診断", layout="wide")
 
 # MediaPipeの初期化
 mp_face_mesh = mp.solutions.face_mesh
@@ -267,6 +267,7 @@ if file_a and file_b:
             st.error("どちらかの画像から顔を検出できませんでした。")
 elif file_a or file_b:
     st.info("比較のために、もう1枚の画像をアップロードしてください。")
+
 
 
 
