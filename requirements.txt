@@ -1,5 +1,5 @@
 streamlit
-mediapipe-silicon==0.10.14
+mediapipe==0.10.14
 opencv-python-headless==4.8.1.78
 protobuf==4.25.3
 numpy<2.0.0
